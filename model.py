@@ -23,6 +23,8 @@ class BaseModel():
             self.model = dict(pd.concat([x, y], axis=1).groupby(by='user_id')['rating'].mean())
         elif self.strategy == 'constant':
             self.model = self.config_value
+        elif self.model == 'dummy':
+            self.model = 'dummy'
         return self
 
     def predict(self, x: pd.DataFrame):
@@ -31,9 +33,10 @@ class BaseModel():
             return np.array(us_id.map(self.model).fillna(self.config_value))
         elif self.strategy == 'constant':
             return np.full(len(x), self.config_value)
+        elif self.strategy == 'dummy':
+            return np.random.uniform(low=2.5, high=5, size=len(x))
         else:
             return None
-
 
 
 class Tuner():

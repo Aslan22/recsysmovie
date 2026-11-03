@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+USERS_ID = set()
+
 MOVIE_PATH = "C:/Users/aslan/Downloads/archive/movie.csv"
 
 N_PARQUET_FILES = 0
@@ -52,3 +54,4 @@ def get_genre_matrix() -> pd.DataFrame:
         other = dummies.drop(columns=genres, errors='ignore').sum(axis=1)
         _genre_matrix = known.assign(other=other).set_index(movies['movieId']).astype(np.int32)
     return _genre_matrix
+
