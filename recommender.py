@@ -1,32 +1,46 @@
 import numpy as np
 import pandas as pd
 from model import BaseModel
-from utils import MOVIE_PATH
+from config import MOVIE_PATH
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+
+class Recommender():
+    def __init__(self, user_id: int=1, engine: Engine=None,
+                 n_candidates: int=200,
+                 random_candidates: bool=False):
+        self.engine = engine
+        self.user_id = user_id
+        self.n_candidates = n_candidates
+        self.random_candidates = random_candidates
+
+
+    def candidates(self, user_id: int=None)->np.ndarray:
+        if user_id is None:
+            user_id = self.user_id
+
+        candidates_: pd.DataFrame
+        if self.random_candidates:
+            candidates_ = pd.read_sql('SELECT movie_id FROM movies '
+                             'ORDER BY random() '
+                             'LIMIT '+str(self.n_candidates), self.engine)
+            return np.array(candidates_)
+        else:
+            return np.array([None])
+
+    def predict_rating(self, user_id: int=None, films: np.ndarray=None):
+
+        if user_id is None:
+            user_id = self.user_id
 
 
 
-def candidates(user_id: int=1, random_mode: bool=False, n_films: int=200):
-    movies = pd.read_csv(MOVIE_PATH)
-    if random_mode:
-        return movies['movieId'].sample(n_films)
-    else:
-        return None
 
-def predict_rating(user_id: int=1, films: list=None):
-    data_x = pd.concat([
-        pd.Series(data=np.full(shape=len(films), fill_value=user_id)),
-        films
-    ], axis=1)
-    model = BaseModel(strategy='dummy')
+    def rank(self, data: pd.DataFrame, top_k: int=5):
+        indx = np.lexsort((data['rating']))[::-1][:top_k]
+        return data.iloc[indx, 0]
 
-    data_x['rating'] = model.predict(data_x)
-    return data_x
-
-def rank(data: pd.DataFrame, top_k: int=5):
-    indx = np.lexsort((data['rating']))[::-1][:top_k]
-    return data.iloc[indx, 0]
-
-def forward(user_id):
-    cands = candidates(user_id=user_id, random_mode=True, n_films=20)
-    data_x = predict_rating(user_id=user_id, films=cands)
-    return rank(data_x)
+    def forward(self, user_id):
+        cands = self.candidates(user_id=user_id, random_mode=True, n_films=20)
+        data_x = self.predict_rating(user_id=user_id, films=cands)
+        return self.rank(data_x)

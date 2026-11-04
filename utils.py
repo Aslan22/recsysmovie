@@ -1,11 +1,9 @@
 import numpy as np
 import pandas as pd
+from config import MOVIE_PATH
 
-USERS_ID = set()
 
-MOVIE_PATH = "C:/Users/aslan/Downloads/archive/movie.csv"
 
-N_PARQUET_FILES = 0
 
 genres = [
     "Action",

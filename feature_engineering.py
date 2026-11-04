@@ -30,13 +30,15 @@ class FeatureEngineering():
         self.database_url = os.environ['RECSYS_DB_URL']
         self.user_indx = user_indx
         self.table_name_in = table_name_in
+        self.engine = create_engine(self.database_url)
 
     def chunk_transform(self, engine, user_ids: tuple=(1, 140000), save_mode: bool=False, table_name: str='rating_upd', load_option: str='sql', n_chunk: int=0):
         l, r = user_ids
 
         data = pd.read_sql('SELECT * '
                            'FROM '+self.table_name_in+
-                           ' WHERE user_id BETWEEN ' + str(l) + ' and ' + str(r), engine)
+                           ' WHERE'
+                           ' user_id BETWEEN ' + str(l) + ' and ' + str(r), engine)
         data['ts'] = pd.to_datetime(data['ts'])
 
         x, y = data.drop(columns=['rating']), data['rating']
@@ -71,12 +73,14 @@ class FeatureEngineering():
         return x_transform
 
 
-    def forward(self, cut_size: int=1000, delete_bd: bool=True, table_name: str='rating_upd', load_option: str='sql'):
-        engine = create_engine(self.database_url)
+    def forward(self, cut_size: int=1000, delete_bd: bool=True,
+                table_name: str='rating_upd', load_option: str='sql'):
+
+
 
         if delete_bd:
             if load_option == 'sql':
-                with engine.begin() as conn:
+                with self.engine.begin() as conn:
                     conn.execute(text("DROP TABLE IF EXISTS "+table_name))
             else:
                 utils.N_PARQUET_FILES = 0
@@ -92,7 +96,7 @@ class FeatureEngineering():
 
         for i in range(start, end, cut_size):
             l, r = i, min(i + cut_size - 1, end)
-            self.chunk_transform(engine=engine, user_ids=(l, r), save_mode=True,
+            self.chunk_transform(engine=self.engine, user_ids=(l, r), save_mode=True,
                                  table_name=table_name, load_option=load_option, n_chunk=n_chunk)
             n_chunk += 1
 
@@ -157,3 +161,30 @@ class FeatureEngineering():
 
 
         return res.join(gm, how='left', on='movie_id', rsuffix='_is_genre')
+
+    def get_user_stats(self, user_id: int=1, ts: pd.Timestamp=None) -> dict:
+        if ts is None:
+            ts = pd.Timestamp.now()
+        data = pd.read_sql(text('SELECT * FROM :table WHERE user_id=:uid'),
+                           self.engine, params={'uid':user_id, 'table':self.table_name_in})
+        movie_id = data['movie_id'].to_numpy()
+        rating = data['rating'].to_numpy()
+        dr = utils.get_genre_matrix().reindex(index=movie_id, fill_value=0).sum() / len(movie_id)
+        ratios = {f'ratio_{x}':y for x, y in zip(dr.index, dr)}
+        return {
+            'count': len(movie_id),
+            'mean_rate': np.mean(rating),
+            'std_rate': np.std(rating),
+            'min_rate': np.min(rating),
+            'max_rate': np.max(rating)
+        } | ratios | {
+            'ts': ts,
+            'year': ts.year,
+            'month': ts.month,
+            'day': ts.day,
+            'hour': ts.hour
+
+        }
+
+
+
