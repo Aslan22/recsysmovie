@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+
+import config
 import utils
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.types import Integer, Float, DateTime, REAL
@@ -165,8 +167,8 @@ class FeatureEngineering():
     def get_user_stats(self, user_id: int=1, ts: pd.Timestamp=None) -> dict:
         if ts is None:
             ts = pd.Timestamp.now()
-        data = pd.read_sql(text('SELECT * FROM :table WHERE user_id=:uid'),
-                           self.engine, params={'uid':user_id, 'table':self.table_name_in})
+        data = pd.read_sql(text(f'SELECT * FROM {config.TABLE_RATING} WHERE user_id=:uid'),
+                           self.engine, params={'uid':user_id})
         movie_id = data['movie_id'].to_numpy()
         rating = data['rating'].to_numpy()
         dr = utils.get_genre_matrix().reindex(index=movie_id, fill_value=0).sum() / len(movie_id)
@@ -183,8 +185,15 @@ class FeatureEngineering():
             'month': ts.month,
             'day': ts.day,
             'hour': ts.hour
-
         }
+
+    def get_movie_stats(self, movie_id: int=1) -> dict:
+        return utils.get_genre_matrix().loc[movie_id, :].to_dict()
+
+    def make_rows(self, user_id: int=1, movie_ids: np.ndarray=None) -> list[dict]:
+        return [self.get_user_stats(user_id=user_id) | self.get_movie_stats(movie_id=movie_id)
+                for movie_id in movie_ids]
+
 
 
 

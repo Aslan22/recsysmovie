@@ -43,8 +43,14 @@ class Tuner():
     def __init__(self, model: type[BaseModel]
                               |type[CatBoostRegressor]
                               |type[LGBMRegressor]
-                              |type[XGBRegressor], direction: str='minimize', metric: Callable=MSE, n_trials: int=50):
-        self.model = model
+                              |type[XGBRegressor], direction: str='minimize',
+                 metric: Callable=MSE, n_trials: int=50,
+                 load_path: str=None):
+        if load_path is None:
+            self.model = model
+        else:
+            self.model = None
+
         self.direction = direction
         self.metric = metric
         self.n_trials = n_trials
