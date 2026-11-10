@@ -138,7 +138,12 @@ class FeatureEngineering():
 
         gm = utils.get_genre_matrix()
         g = gm.reindex(movie, fill_value=0).to_numpy(np.int32)
-        ratios = (_exclusive_group_cumsum(g, starts) / cnt_nan[:, None]).astype(np.float32)
+        g_cnt = _exclusive_group_cumsum(g, starts)
+
+        ratios = (g_cnt / cnt_nan[:, None]).astype(np.float32)
+
+        g_sum = _exclusive_group_cumsum(g*rating[:, None], starts)
+        mean_rating = (g_sum/ np.where(g_cnt > 0, g_cnt, np.nan)).astype(np.float32)
 
         res = pd.DataFrame({
             'user_id': user,
@@ -150,7 +155,7 @@ class FeatureEngineering():
             'movie_id': movie
         })
         res[[f'ratio_{c}' for c in gm.columns]] = ratios
-
+        res[[f'mean_{c}' for c in gm.columns]] = mean_rating
 
         res.index = order
         res = res.sort_index()
