@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 
+import config
 import utils
 from model import BaseModel
-from config import MOVIE_PATH
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 import feature_engineering
@@ -11,7 +11,7 @@ from model import Model
 
 class Recommender():
     def __init__(self, user_id: int=1, engine: Engine=None,
-                 n_candidates: int=200,
+                 n_candidates: int=config.N_CANDIDATES,
                  random_candidates: bool=False, model: Model=None):
         self.engine = engine
         self.user_id = user_id
@@ -26,7 +26,7 @@ class Recommender():
 
         candidates_: pd.DataFrame
         if self.random_candidates:
-            candidates_ = pd.read_sql('SELECT movie_id FROM movies '
+            candidates_ = pd.read_sql('SELECT movie_id FROM ' + config.TABLE_MOVIES + ' '
                              'ORDER BY random() '
                              'LIMIT '+str(self.n_candidates), self.engine)
             return candidates_['movie_id'].to_numpy()
@@ -47,7 +47,7 @@ class Recommender():
             'rating':y
         })
 
-    def rank(self, data: pd.DataFrame, top_k: int = 5):
+    def rank(self, data: pd.DataFrame, top_k: int = config.TOP_K):
         return data.nlargest(top_k, 'rating')['movie_id']
 
 

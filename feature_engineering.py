@@ -5,9 +5,6 @@ import config
 import utils
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.types import Integer, Float, DateTime, REAL
-import pathlib
-import os
-from dotenv import load_dotenv
 
 def _exclusive_group_cumsum(values: np.ndarray, starts: np.ndarray) -> np.ndarray:
     excl = np.cumsum(values, axis=0) - values
@@ -27,14 +24,14 @@ def psql_insert_copy(table, conn, keys, data_iter):
         cur.copy_expert(f'COPY {name} ({columns}) FROM STDIN WITH CSV', buf)
 
 class FeatureEngineering():
-    def __init__(self, table_name_in: str='rating_cut', user_indx: tuple=(1, 140000)):
-        load_dotenv()
-        self.database_url = os.environ['RECSYS_DB_URL']
+
+    def __init__(self, table_name_in: str=config.TABLE_RATING_CUT, user_indx: tuple=config.USER_ID_RANGE):
+        self.database_url = config.RECSYS_DB_URL
         self.user_indx = user_indx
         self.table_name_in = table_name_in
         self.engine = create_engine(self.database_url)
 
-    def chunk_transform(self, engine, user_ids: tuple=(1, 140000), save_mode: bool=False, table_name: str='rating_upd', load_option: str='sql', n_chunk: int=0):
+    def chunk_transform(self, engine, user_ids: tuple=config.USER_ID_RANGE, save_mode: bool=False, table_name: str=config.TABLE_RATING_UPD, load_option: str='sql', n_chunk: int=0):
         l, r = user_ids
 
         data = pd.read_sql('SELECT * '
@@ -45,7 +42,17 @@ class FeatureEngineering():
 
         x, y = data.drop(columns=['rating']), data['rating']
         x_transform = self.transform(x, y)
-        data_transform = pd.concat([x_transform, y], axis=1)
+
+        feats = pd.read_sql(text('SELECT * '
+                           'FROM ' + config.TABLE_MOVIE_FEATS +
+                           ' WHERE'
+                           ' user_id BETWEEN :le and :ri'), engine, params={'le':l, 'ri':r})
+
+        feats['av_rating_movie'] = feats['movie_sum'] / np.where(feats['movie_cnt'] > 0, feats['movie_cnt'], np.nan)
+        x_transform = x_transform.merge(feats[['user_id', 'movie_id',
+                                      'movie_cnt', 'av_rating_movie']], on=['user_id', 'movie_id'], how='left')
+        x_transform['rating'] = y
+
         del data
 
         if save_mode:
@@ -59,7 +66,7 @@ class FeatureEngineering():
                     if_exists = 'append'
 
 
-                data_transform.to_sql(
+                x_transform.to_sql(
                     if_exists=if_exists,
                     index=False,
                     name=table_name,
@@ -67,7 +74,8 @@ class FeatureEngineering():
                     method=psql_insert_copy
                 )
             elif load_option == 'parquet':
-                data_transform.to_parquet(f'C:/Users/aslan/Downloads/archive/rating_upd/{n_chunk}.parquet')
+                config.PARQUET_DIR.mkdir(parents=True, exist_ok=True)
+                x_transform.to_parquet(config.PARQUET_DIR / f'{n_chunk}.parquet')
 
 
 
@@ -75,8 +83,8 @@ class FeatureEngineering():
         return x_transform
 
 
-    def forward(self, cut_size: int=1000, delete_bd: bool=True,
-                table_name: str='rating_upd', load_option: str='sql'):
+    def forward(self, cut_size: int=config.CHUNK_SIZE, delete_bd: bool=True,
+                table_name: str=config.TABLE_RATING_UPD, load_option: str='sql'):
 
 
 
@@ -85,10 +93,9 @@ class FeatureEngineering():
                 with self.engine.begin() as conn:
                     conn.execute(text("DROP TABLE IF EXISTS "+table_name))
             else:
-                utils.N_PARQUET_FILES = 0
+                config.N_PARQUET_FILES = 0
 
-                pth = pathlib.Path('C:/Users/aslan/Downloads/archive/rating_upd')
-                fls = pth.glob('*.parquet')
+                fls = config.PARQUET_DIR.glob('*.parquet')
                 for f in fls:
                     f.unlink()
 
@@ -96,13 +103,13 @@ class FeatureEngineering():
         start, end = self.user_indx[0], self.user_indx[1]
         n_chunk = 0
 
-        for i in range(start, end, cut_size):
+        for i in range(start, end+1, cut_size):
             l, r = i, min(i + cut_size - 1, end)
             self.chunk_transform(engine=self.engine, user_ids=(l, r), save_mode=True,
                                  table_name=table_name, load_option=load_option, n_chunk=n_chunk)
             n_chunk += 1
 
-        utils.N_PARQUET_FILES = n_chunk
+        config.N_PARQUET_FILES = n_chunk
 
 
 
@@ -169,6 +176,9 @@ class FeatureEngineering():
 
         return res.join(gm, how='left', on='movie_id', rsuffix='_is_genre')
 
+
+
+
     def get_user_stats(self, user_id: int=1, ts: pd.Timestamp=None) -> dict:
         if ts is None:
             ts = pd.Timestamp.now()
@@ -178,6 +188,8 @@ class FeatureEngineering():
         rating = data['rating'].to_numpy()
         dr = utils.get_genre_matrix().reindex(index=movie_id, fill_value=0).sum() / len(movie_id)
         ratios = {f'ratio_{x}':y for x, y in zip(dr.index, dr)}
+
+
         return {
             'count': len(movie_id),
             'mean_rate': np.mean(rating),

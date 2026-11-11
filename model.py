@@ -9,10 +9,12 @@ from typing import Callable
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import root_mean_squared_error as RMSE, mean_absolute_error as MAE, mean_squared_error as MSE
 import joblib
-import pathlib
+
+import config
+
 
 class BaseModel():
-    def __init__(self, strategy: str='mean', config_value: float=3.0):
+    def __init__(self, strategy: str='mean', config_value: float=config.DEFAULT_RATING):
         self.strategy = strategy
         self.model = None
         self.config_value = config_value
@@ -39,12 +41,25 @@ class BaseModel():
             return None
 
 
+def _model_type(model_cls) -> str | None:
+
+    if model_cls is BaseModel:
+        return 'base'
+    if model_cls is CatBoostRegressor:
+        return 'catboost'
+    if model_cls is LGBMRegressor:
+        return 'lgbm'
+    if model_cls is XGBRegressor:
+        return 'xgb'
+    return None
+
+
 class Tuner():
     def __init__(self, model: type[BaseModel]
                               |type[CatBoostRegressor]
                               |type[LGBMRegressor]
                               |type[XGBRegressor], direction: str='minimize',
-                 metric: Callable=MSE, n_trials: int=50,
+                 metric: Callable=MSE, n_trials: int=config.N_TRIALS,
                  load_path: str=None):
         if load_path is None:
             self.model = model
@@ -60,7 +75,7 @@ class Tuner():
     def tuning(self, x_train: pd.DataFrame, y_train: pd.Series, x_valid: pd.DataFrame,
                y_valid: pd.Series, save_mode=False):
         study = optuna.create_study(direction=self.direction, study_name='find_hp',
-                                    sampler=optuna.samplers.TPESampler(seed=42))
+                                    sampler=optuna.samplers.TPESampler(seed=config.RANDOM_SEED))
         objective: Callable | None=None
 
         def get_score(model: Model=None):
@@ -115,18 +130,8 @@ class Tuner():
         self.study = study
 
         if save_mode:
-            path_params = 'C:/Users/aslan/PycharmProjects/recsysmovie/artifacts/models'
-            if self.model is BaseModel:
-                path_params += '/base_model/base_params.json'
-
-            if self.model is CatBoostRegressor:
-                path_params += '/catboost/catboost_params.json'
-
-            if self.model is XGBRegressor:
-                path_params += '/xgboost/xgboost_params.json'
-
-            if self.model is LGBMRegressor:
-                path_params += '/lightgbm/lightgbm_params.json'
+            path_params = config.PARAMS_FILES[_model_type(self.model)]
+            path_params.parent.mkdir(parents=True, exist_ok=True)
 
             with open(path_params, 'w', encoding='utf-8') as f:
                 json.dump(self.best_params, f, indent=2)
@@ -142,39 +147,29 @@ class Model():
                               |type[LGBMRegressor]
                               |type[XGBRegressor], **params):
         self.params = params
-        self.model_type = None
         self.metrics = None
-        if model is BaseModel:
-            self.model_type = 'base'
-        elif model is CatBoostRegressor:
-            self.model_type = 'catboost'
-        elif model is LGBMRegressor:
-            self.model_type = 'lgbm'
-        elif model is XGBRegressor:
-            self.model_type = 'xgb'
+        self.model_type = _model_type(model)
 
         self.model = model(**params)
 
     def fit(self, x: pd.DataFrame, y: pd.Series, save_mode: bool=False):
         self.model.fit(x, y)
 
-        if save_mode:
-            path_model = 'C:/Users/aslan/PycharmProjects/recsysmovie/artifacts/models'
+        if save_mode and self.model_type is not None:
+            path_model = config.MODEL_FILES[self.model_type]
+            path_model.parent.mkdir(parents=True, exist_ok=True)
+
             if self.model_type == 'base':
-                path_model += '/base_model/base.joblib'
                 joblib.dump(self.model, path_model)
 
             if self.model_type == 'catboost':
-                path_model += '/catboost/catboost.cbm'
-                self.model.save_model(path_model)
+                self.model.save_model(str(path_model))
 
             if self.model_type == 'xgb':
-                path_model += '/xgboost/xgboost.json'
-                self.model.save_model(path_model)
+                self.model.save_model(str(path_model))
 
             if self.model_type == 'lgbm':
-                path_model += '/lightgbm/lightgbm.txt'
-                self.model.booster_.save_model(path_model)
+                self.model.booster_.save_model(str(path_model))
 
 
 
@@ -194,17 +189,8 @@ class Model():
         self.metrics = metrics
 
         if save_mode:
-            path_metrics = 'C:/Users/aslan/PycharmProjects/recsysmovie/reports'
-            if self.model_type == 'base':
-                path_metrics += '/basemodel_metrics.json'
-            elif self.model_type == 'catboost':
-                path_metrics += '/catboost_metrics.json'
-            elif self.model_type == 'lgbm':
-                path_metrics += '/lgbm_metrics.json'
-            elif self.model_type == 'xgb':
-                path_metrics += '/xgb_metrics.json'
-            else:
-                path_metrics += '/other_metrics.json'
+            path_metrics = config.METRICS_FILES.get(self.model_type, config.OTHER_METRICS_FILE)
+            path_metrics.parent.mkdir(parents=True, exist_ok=True)
 
             with open(path_metrics, 'w', encoding='utf-8') as f:
                 json.dump(self.metrics, f, indent=2)
