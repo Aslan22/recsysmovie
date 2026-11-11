@@ -34,10 +34,10 @@ class FeatureEngineering():
     def chunk_transform(self, engine, user_ids: tuple=config.USER_ID_RANGE, save_mode: bool=False, table_name: str=config.TABLE_RATING_UPD, load_option: str='sql', n_chunk: int=0):
         l, r = user_ids
 
-        data = pd.read_sql('SELECT * '
-                           'FROM '+self.table_name_in+
+        data = pd.read_sql(text(f'SELECT * '
+                           'FROM ' + self.table_name_in +
                            ' WHERE'
-                           ' user_id BETWEEN ' + str(l) + ' and ' + str(r), engine)
+                           ' user_id BETWEEN :le and :ri'), engine, params={'le':l, 'ri':r})
         data['ts'] = pd.to_datetime(data['ts'])
 
         x, y = data.drop(columns=['rating']), data['rating']
