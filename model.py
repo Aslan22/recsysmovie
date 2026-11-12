@@ -7,10 +7,11 @@ import optuna
 import json
 from typing import Callable
 from sklearn.model_selection import cross_val_score
-from sklearn.metrics import root_mean_squared_error as RMSE, mean_absolute_error as MAE, mean_squared_error as MSE
+from sklearn.metrics import root_mean_squared_error as RMSE, mean_absolute_error as MAE, mean_squared_error as MSE, mean_absolute_percentage_error as MAPE
 import joblib
-
+from pathlib import Path
 import config
+import lightgbm
 
 
 class BaseModel():
@@ -59,12 +60,9 @@ class Tuner():
                               |type[CatBoostRegressor]
                               |type[LGBMRegressor]
                               |type[XGBRegressor], direction: str='minimize',
-                 metric: Callable=MSE, n_trials: int=config.N_TRIALS,
-                 load_path: str=None):
-        if load_path is None:
-            self.model = model
-        else:
-            self.model = None
+                 metric: Callable=MSE, n_trials: int=config.N_TRIALS):
+
+        self.model = model
 
         self.direction = direction
         self.metric = metric
@@ -149,8 +147,23 @@ class Model():
         self.params = params
         self.metrics = None
         self.model_type = _model_type(model)
-
         self.model = model(**params)
+
+
+    def load_model(self, path: Path=None):
+        if path is None:
+            path = config.MODEL_FILES[self.model_type]
+
+        if not Path(path).exists():
+            raise FileNotFoundError(f'Нет сохранённой модели: {path}')
+
+        if self.model_type == 'base':
+            self.model = joblib.load(path)
+        elif self.model_type in ['catboost', 'xgb'] :
+            self.model.load_model(str(path))
+        elif self.model_type == 'lgbm':
+            self.model = lightgbm.Booster(model_file=str(path))
+        return self
 
     def fit(self, x: pd.DataFrame, y: pd.Series, save_mode: bool=False):
         self.model.fit(x, y)
@@ -182,9 +195,9 @@ class Model():
     def get_metrics(self, x: pd.DataFrame, y: pd.Series, save_mode: bool=False):
         y_score = self.model.predict(x)
         metrics = {
-            'RMSE': RMSE(y_true=y, y_pred=y_score),
             'MSE': MSE(y_true=y, y_pred=y_score),
             'MAE': MAE(y_true=y, y_pred=y_score),
+            'MAPE': MAPE(y_true=y, y_pred=y_score)
         }
         self.metrics = metrics
 

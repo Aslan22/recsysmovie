@@ -134,3 +134,37 @@ DEFAULT_RATING = 3.0
 
 N_CANDIDATES = 200   # сколько фильмов-кандидатов отбирается перед ранжированием
 TOP_K = 5            # сколько фильмов попадает в итоговую рекомендацию
+
+# ---------------------------------------------------------------------------
+# 7. Наименования признаков
+# ---------------------------------------------------------------------------
+COLUMN_RATING_UPDATE = ['user_id', 'count', 'mean_rate', 'std_rate', 'min_rate', 'max_rate',
+       'movie_id', 'ratio_Action', 'ratio_Adventure', 'ratio_Animation',
+       'ratio_Children', 'ratio_Comedy', 'ratio_Crime', 'ratio_Documentary',
+       'ratio_Drama', 'ratio_Fantasy', 'ratio_Film-Noir', 'ratio_Horror',
+       'ratio_Musical', 'ratio_Mystery', 'ratio_Romance', 'ratio_Sci-Fi',
+       'ratio_Thriller', 'ratio_War', 'ratio_Western', 'ratio_other',
+       'mean_Action', 'mean_Adventure', 'mean_Animation', 'mean_Children',
+       'mean_Comedy', 'mean_Crime', 'mean_Documentary', 'mean_Drama',
+       'mean_Fantasy', 'mean_Film-Noir', 'mean_Horror', 'mean_Musical',
+       'mean_Mystery', 'mean_Romance', 'mean_Sci-Fi', 'mean_Thriller',
+       'mean_War', 'mean_Western', 'mean_other', 'ts', 'year', 'month', 'day',
+       'hour', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy',
+       'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror',
+       'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western',
+       'other', 'movie_cnt', 'av_rating_movie', 'rating']
+
+FEATS_CATBOOST = ['count', 'mean_rate', 'std_rate', 'min_rate', 'max_rate', 'ratio_Action', 'ratio_Adventure', 'ratio_Animation',
+       'ratio_Children', 'ratio_Comedy', 'ratio_Crime', 'ratio_Documentary',
+       'ratio_Drama', 'ratio_Fantasy', 'ratio_Film-Noir', 'ratio_Horror',
+       'ratio_Musical', 'ratio_Mystery', 'ratio_Romance', 'ratio_Sci-Fi',
+       'ratio_Thriller', 'ratio_War', 'ratio_Western', 'ratio_other',
+       'mean_Action', 'mean_Adventure', 'mean_Animation', 'mean_Children',
+       'mean_Comedy', 'mean_Crime', 'mean_Documentary', 'mean_Drama',
+       'mean_Fantasy', 'mean_Film-Noir', 'mean_Horror', 'mean_Musical',
+       'mean_Mystery', 'mean_Romance', 'mean_Sci-Fi', 'mean_Thriller',
+       'mean_War', 'mean_Western', 'mean_other', 'month',
+       'hour', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy',
+       'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror',
+       'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western',
+       'other', 'movie_cnt', 'av_rating_movie']
