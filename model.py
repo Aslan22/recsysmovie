@@ -71,9 +71,40 @@ class Tuner():
         self.study = None
 
     def tuning(self, x_train: pd.DataFrame, y_train: pd.Series, x_valid: pd.DataFrame,
-               y_valid: pd.Series, save_mode=False):
-        study = optuna.create_study(direction=self.direction, study_name='find_hp',
+               y_valid: pd.Series, save_mode=False, resume: bool=True):
+        # Подбор записывается в файл на диске (config.OPTUNA_DB_FILE): Optuna сама
+        # дописывает туда каждую попытку сразу после её завершения.
+        #   resume=True  — продолжить прошлый подбор этой модели, если он есть;
+        #   resume=False — стереть прошлый подбор и начать с нуля. Так нужно делать,
+        #                  когда поменялись данные, признаки или границы гиперпараметров:
+        #                  старые попытки с новыми сравнивать уже нельзя.
+        config.OPTUNA_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+        storage = f'sqlite:///{config.OPTUNA_DB_FILE.as_posix()}'
+        study_name = f'find_hp_{_model_type(self.model)}'
+
+        if not resume:
+            try:
+                optuna.delete_study(study_name=study_name, storage=storage)
+            except KeyError:
+                pass  # подбора с таким именем ещё не было, удалять нечего
+
+        # load_if_exists=True: если подбор с таким именем уже лежит в файле,
+        # он открывается вместе со всеми прошлыми попытками, а не создаётся заново.
+        study = optuna.create_study(direction=self.direction, study_name=study_name,
+                                    storage=storage, load_if_exists=True,
                                     sampler=optuna.samplers.TPESampler(seed=config.RANDOM_SEED))
+
+        # Считаем только завершённые попытки: та, на которой подбор оборвался,
+        # осталась в файле незаконченной и в зачёт не идёт.
+        n_done = len(study.get_trials(states=[optuna.trial.TrialState.COMPLETE]))
+        n_left = max(self.n_trials - n_done, 0)
+        print(f'Подбор {study_name}: готово попыток {n_done}, осталось {n_left}')
+
+        # Первые 10 попыток Optuna выбирает случайно. С одним и тем же зерном генератор
+        # после перезапуска выдал бы те же самые точки, что и в прошлый раз, и попытки
+        # ушли бы на повтор уже проверенного. Поэтому при продолжении зерно сдвигается
+        # на число готовых попыток. При запуске с нуля n_done = 0, и зерно прежнее.
+        study.sampler = optuna.samplers.TPESampler(seed=config.RANDOM_SEED + n_done)
         objective: Callable | None=None
 
         def get_score(model: Model=None):
@@ -131,7 +162,10 @@ class Tuner():
                                         max_leaves=max_leaves, verbosity=0).fit(x_train, y_train)
                 return get_score(model)
 
-        study.optimize(objective, n_trials=self.n_trials)
+        # Запускаем только недостающие попытки. Если все n_trials уже сделаны,
+        # новых не будет, и ниже просто возьмутся лучшие параметры из файла.
+        if n_left > 0:
+            study.optimize(objective, n_trials=n_left)
 
 
         self.best_params = study.best_params | study.best_trial.user_attrs

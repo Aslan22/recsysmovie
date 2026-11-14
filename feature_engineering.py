@@ -5,6 +5,7 @@ import config
 import utils
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.types import Integer, Float, DateTime, REAL
+from sqlalchemy.engine import Engine
 
 def _exclusive_group_cumsum(values: np.ndarray, starts: np.ndarray) -> np.ndarray:
     excl = np.cumsum(values, axis=0) - values
@@ -25,16 +26,20 @@ def psql_insert_copy(table, conn, keys, data_iter):
 
 class FeatureEngineering():
 
-    def __init__(self, table_name_in: str=config.TABLE_RATING_CUT, user_indx: tuple=config.USER_ID_RANGE):
+    def __init__(self, table_name_in: str=config.TABLE_RATING_CUT,
+                 user_indx: tuple=config.USER_ID_RANGE, engine: Engine=None):
         self.database_url = config.RECSYS_DB_URL
         self.user_indx = user_indx
         self.table_name_in = table_name_in
-        self.engine = create_engine(self.database_url)
+        if engine is None:
+            self.engine = create_engine(self.database_url)
+        else:
+            self.engine = engine
 
 
     def get_movie_stats(self, movie_id: int=1) -> dict:
         q = pd.read_sql(
-            text('SELECT * from movie_stats WHERE movie_id=:mid'),
+            text(f'SELECT * from {config.TABLE_MOVIE_STATS} WHERE movie_id=:mid'),
             con=self.engine,
             params={'mid': int(movie_id)}
         )
@@ -199,8 +204,10 @@ class FeatureEngineering():
 
     def make_rows(self, user_id: int=1, movie_ids: np.ndarray=None) -> list[dict]:
         X = pd.read_sql(
-            text("SELECT * FROM rating WHERE user_id=:uid"),
-            con=self.engine, params={'uid':user_id}
+            text(f"SELECT * FROM {config.TABLE_RATING} WHERE user_id=:uid "
+                 f"UNION ALL "
+                 f"SELECT * FROM {config.TABLE_RATING_NEW} WHERE user_id=:uid"),
+            con=self.engine, params={'uid':int(user_id)}
         )
 
         data = []
@@ -208,7 +215,7 @@ class FeatureEngineering():
             q = self.get_movie_stats(i)
             X_ = pd.concat([X,
                             pd.DataFrame({'user_id':[user_id], 'movie_id':[i], 'rating':[0.0],
-                                          'ts':pd.Timestamp().now()})
+                                          'ts':[pd.Timestamp.now()]})
             ], ignore_index=True)
             data.append(
                 self.transform(X_.drop(columns=['rating']), X_['rating'], last=True).to_dict() | q
