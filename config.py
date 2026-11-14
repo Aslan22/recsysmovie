@@ -124,6 +124,14 @@ RANDOM_SEED = 42
 # Сколько вариантов гиперпараметров пробует Optuna.
 N_TRIALS = 50
 
+# Потолок числа деревьев CatBoost при подборе. Сколько деревьев нужно на самом деле,
+# определяет ранняя остановка; потолок только не даёт обучению идти бесконечно.
+CATBOOST_MAX_ITERATIONS = 2000
+
+# Ранняя остановка: обучение прекращается, если ошибка на валидации
+# не улучшается столько деревьев подряд.
+EARLY_STOPPING_ROUNDS = 50
+
 # Оценка, которую базовая модель предсказывает, когда о пользователе ничего не известно.
 DEFAULT_RATING = 3.0
 
@@ -163,8 +171,7 @@ FEATS_CATBOOST = ['count', 'mean_rate', 'std_rate', 'min_rate', 'max_rate', 'rat
        'mean_Comedy', 'mean_Crime', 'mean_Documentary', 'mean_Drama',
        'mean_Fantasy', 'mean_Film-Noir', 'mean_Horror', 'mean_Musical',
        'mean_Mystery', 'mean_Romance', 'mean_Sci-Fi', 'mean_Thriller',
-       'mean_War', 'mean_Western', 'mean_other', 'month',
-       'hour', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy',
+       'mean_War', 'mean_Western', 'mean_other', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy',
        'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror',
        'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western',
        'other', 'movie_cnt', 'av_rating_movie']

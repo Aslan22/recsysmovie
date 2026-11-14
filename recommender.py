@@ -12,7 +12,7 @@ from model import Model
 class Recommender():
     def __init__(self, user_id: int=1, engine: Engine=None,
                  n_candidates: int=config.N_CANDIDATES,
-                 random_candidates: bool=False, model: Model=None):
+                 random_candidates: bool=True, model: Model=None):
         self.engine = engine
         self.user_id = user_id
         self.n_candidates = n_candidates
@@ -40,7 +40,7 @@ class Recommender():
             user_id = self.user_id
         x = pd.DataFrame(
             feature_engineering.FeatureEngineering().make_rows(user_id=user_id, movie_ids=films),
-        columns=utils.embedding_user_cols + utils.genres)
+        columns=config.FEATS_CATBOOST)
         y = self.model.predict(x)
         return pd.DataFrame({
             'movie_id':films,

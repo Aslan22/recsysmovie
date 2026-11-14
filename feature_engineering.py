@@ -31,6 +31,21 @@ class FeatureEngineering():
         self.table_name_in = table_name_in
         self.engine = create_engine(self.database_url)
 
+
+    def get_movie_stats(self, movie_id: int=1) -> dict:
+        q = pd.read_sql(
+            text('SELECT * from movie_stats WHERE movie_id=:mid'),
+            con=self.engine,
+            params={'mid': int(movie_id)}
+        )
+        if len(q) == 0:
+            return {'movie_cnt':0,
+                'av_rating_movie':np.nan}
+
+        return {'movie_cnt':q.at[0, 'movie_cnt'],
+                'av_rating_movie':q.at[0, 'movie_sum'] / q.at[0, 'movie_cnt']}
+
+
     def chunk_transform(self, engine, user_ids: tuple=config.USER_ID_RANGE, save_mode: bool=False, table_name: str=config.TABLE_RATING_UPD, load_option: str='sql', n_chunk: int=0):
         l, r = user_ids
 
@@ -42,13 +57,14 @@ class FeatureEngineering():
 
         x, y = data.drop(columns=['rating']), data['rating']
         x_transform = self.transform(x, y)
-
         feats = pd.read_sql(text('SELECT * '
-                           'FROM ' + config.TABLE_MOVIE_FEATS +
-                           ' WHERE'
-                           ' user_id BETWEEN :le and :ri'), engine, params={'le':l, 'ri':r})
+                                 'FROM ' + config.TABLE_MOVIE_FEATS +
+                                 ' WHERE'
+                                 ' user_id BETWEEN :le and :ri'),
+                            self.engine, params={'le': l, 'ri': r})
 
         feats['av_rating_movie'] = feats['movie_sum'] / np.where(feats['movie_cnt'] > 0, feats['movie_cnt'], np.nan)
+
         x_transform = x_transform.merge(feats[['user_id', 'movie_id',
                                       'movie_cnt', 'av_rating_movie']], on=['user_id', 'movie_id'], how='left')
         x_transform['rating'] = y
@@ -115,7 +131,7 @@ class FeatureEngineering():
 
 
 
-    def transform(self, x: pd.DataFrame, y: np.ndarray) -> pd.DataFrame:
+    def transform(self, x: pd.DataFrame, y: np.ndarray, last: bool=False) -> pd.DataFrame:
 
         user = x['user_id'].to_numpy()
         movie = x['movie_id'].to_numpy()
@@ -173,43 +189,33 @@ class FeatureEngineering():
         res['day'] = ts.dt.day
         res['hour'] = ts.dt.hour
 
-
-        return res.join(gm, how='left', on='movie_id', rsuffix='_is_genre')
-
-
-
-
-    def get_user_stats(self, user_id: int=1, ts: pd.Timestamp=None) -> dict:
-        if ts is None:
-            ts = pd.Timestamp.now()
-        data = pd.read_sql(text(f'SELECT * FROM {config.TABLE_RATING} WHERE user_id=:uid'),
-                           self.engine, params={'uid':user_id})
-        movie_id = data['movie_id'].to_numpy()
-        rating = data['rating'].to_numpy()
-        dr = utils.get_genre_matrix().reindex(index=movie_id, fill_value=0).sum() / len(movie_id)
-        ratios = {f'ratio_{x}':y for x, y in zip(dr.index, dr)}
+        res = res.join(gm, how='left', on='movie_id', rsuffix='_is_genre')
+        if last:
+            return res.iloc[-1, :]
+        else:
+            return res
 
 
-        return {
-            'count': len(movie_id),
-            'mean_rate': np.mean(rating),
-            'std_rate': np.std(rating),
-            'min_rate': np.min(rating),
-            'max_rate': np.max(rating)
-        } | ratios | {
-            'ts': ts,
-            'year': ts.year,
-            'month': ts.month,
-            'day': ts.day,
-            'hour': ts.hour
-        }
-
-    def get_movie_stats(self, movie_id: int=1) -> dict:
-        return utils.get_genre_matrix().loc[movie_id, :].to_dict()
 
     def make_rows(self, user_id: int=1, movie_ids: np.ndarray=None) -> list[dict]:
-        return [self.get_user_stats(user_id=user_id) | self.get_movie_stats(movie_id=movie_id)
-                for movie_id in movie_ids]
+        X = pd.read_sql(
+            text("SELECT * FROM rating WHERE user_id=:uid"),
+            con=self.engine, params={'uid':user_id}
+        )
+
+        data = []
+        for i in movie_ids:
+            q = self.get_movie_stats(i)
+            X_ = pd.concat([X,
+                            pd.DataFrame({'user_id':[user_id], 'movie_id':[i], 'rating':[0.0],
+                                          'ts':pd.Timestamp().now()})
+            ], ignore_index=True)
+            data.append(
+                self.transform(X_.drop(columns=['rating']), X_['rating'], last=True).to_dict() | q
+            )
+
+        return data
+
 
 
 

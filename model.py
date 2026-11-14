@@ -77,7 +77,6 @@ class Tuner():
         objective: Callable | None=None
 
         def get_score(model: Model=None):
-            model.fit(x_train, y_train)
             return self.metric(y_true=y_valid, y_pred=model.predict(x_valid))
 
 
@@ -85,18 +84,26 @@ class Tuner():
             def objective(trial):
                 v = trial.suggest_float('config_value', 1, 5)
                 c = trial.suggest_categorical('strategy', ['mean', 'constant'])
-                return get_score(Model(model=BaseModel, strategy=c, config_value=v))
+                model = Model(model=BaseModel, strategy=c, config_value=v).fit(x_train, y_train)
+                return get_score(model)
 
         elif self.model is CatBoostRegressor:
             def objective(trial):
-                iterations = trial.suggest_int('iterations', 50, 1000)
                 depth = trial.suggest_int('depth', 4, 10)
-                learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
+
+                learning_rate = trial.suggest_float('learning_rate', 0.03, 0.3, log=True)
                 l2_leaf_reg = trial.suggest_float('l2_leaf_reg', 1e-3, 10, log=True)
-                return get_score(Model(model=CatBoostRegressor, iterations=iterations,
+
+                model = Model(model=CatBoostRegressor, iterations=config.CATBOOST_MAX_ITERATIONS,
                                         depth=depth,
                                         learning_rate=learning_rate,
-                                        l2_leaf_reg=l2_leaf_reg, verbose=False))
+                                        l2_leaf_reg=l2_leaf_reg, verbose=False
+                                       ).fit(x_train, y_train,
+                                            eval_set=(x_valid, y_valid),
+                                            early_stopping_rounds=config.EARLY_STOPPING_ROUNDS)
+
+                trial.set_user_attr('iterations', model.model.best_iteration_ + 1)
+                return get_score(model)
 
         elif self.model is LGBMRegressor:
             def objective(trial):
@@ -105,11 +112,12 @@ class Tuner():
                 learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
                 num_leaves = trial.suggest_int('num_leaves', 5, 50)
                 reg_lambda = trial.suggest_float('reg_lambda', 1e-3, 10, log=True)
-                return get_score(Model(model=LGBMRegressor, n_estimators=n_estimators,
+                model = Model(model=LGBMRegressor, n_estimators=n_estimators,
                                         max_depth=max_depth,
                                         learning_rate=learning_rate,
                                         num_leaves=num_leaves,
-                                        reg_lambda=reg_lambda, verbose=-1))
+                                        reg_lambda=reg_lambda, verbose=-1).fit(x_train, y_train)
+                return get_score(model)
 
         elif self.model is XGBRegressor:
             def objective(trial):
@@ -117,14 +125,16 @@ class Tuner():
                 max_depth = trial.suggest_int('max_depth', 3, 12)
                 learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
                 max_leaves = trial.suggest_int('max_leaves', 5, 50)
-                return get_score(Model(model=XGBRegressor, n_estimators=n_estimators,
+                model = Model(model=XGBRegressor, n_estimators=n_estimators,
                                         max_depth=max_depth,
                                         learning_rate=learning_rate,
-                                        max_leaves=max_leaves, verbosity=0))
+                                        max_leaves=max_leaves, verbosity=0).fit(x_train, y_train)
+                return get_score(model)
 
         study.optimize(objective, n_trials=self.n_trials)
 
-        self.best_params = study.best_params
+
+        self.best_params = study.best_params | study.best_trial.user_attrs
         self.study = study
 
         if save_mode:
@@ -165,8 +175,8 @@ class Model():
             self.model = lightgbm.Booster(model_file=str(path))
         return self
 
-    def fit(self, x: pd.DataFrame, y: pd.Series, save_mode: bool=False):
-        self.model.fit(x, y)
+    def fit(self, x: pd.DataFrame, y: pd.Series, save_mode: bool=False, **fit_params):
+        self.model.fit(x, y, **fit_params)
 
         if save_mode and self.model_type is not None:
             path_model = config.MODEL_FILES[self.model_type]
