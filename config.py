@@ -105,6 +105,7 @@ TABLE_RATING_UPD = 'rating_upd'    # оценки вместе с посчита
 TABLE_MOVIES = 'movies'            # справочник фильмов
 TABLE_MOVIE_FEATS = 'movie_feats'  # накопительные статистики фильма на момент каждой оценки
 TABLE_MOVIE_STATS = 'movie_stats'
+TABLE_USERS_NEW='users_new'
 
 
 # ---------------------------------------------------------------------------

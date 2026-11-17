@@ -98,14 +98,14 @@ class Recommender():
         if user_id is None:
             user_id = self.user_id
         if self.is_cold_start(user_id):
-            return self.top_films(10)
+            return self.top_films(n=10, user_id=user_id)
 
         cands = self.candidates(user_id=user_id)
         mo_ra = self.predict_rating(user_id=user_id, films=cands)
         return self.rank(mo_ra)
 
     def add_rating(self, user_id: int=1, movie_id: int=1, rating: float=0.0):
-        if 0.0 <= rating <= 5.0:
+        if 0.0 < rating <= 5.0:
             with self.engine.begin() as connect:
                 connect.execute(
                     text(f'INSERT INTO {config.TABLE_RATING_NEW} (user_id, movie_id, rating, ts) '
@@ -116,5 +116,20 @@ class Recommender():
                                 'r':float(rating)}
                 )
         else:
-            return
+            raise ValueError('Рейтинг должен быть положительным и не более 5!')
+
+    def get_new_user_id(self):
+        with self.engine.connect() as connect:
+            m = connect.execute(
+                text(f'SELECT GREATEST('
+                     f'(SELECT max(user_id) FROM {config.TABLE_USERS_NEW}), '
+                     f'(SELECT max(user_id) FROM {config.TABLE_RATING}))')
+            ).scalar()
+
+        with self.engine.begin() as connect:
+            connect.execute(text(f'INSERT INTO {config.TABLE_USERS_NEW}(user_id) '
+                            f'VALUES(:m)'), parameters={'m':m+1})
+
+        return m + 1
+
 

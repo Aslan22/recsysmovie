@@ -53,3 +53,4 @@ def get_genre_matrix() -> pd.DataFrame:
         _genre_matrix = known.assign(other=other).set_index(movies['movieId']).astype(np.int32)
     return _genre_matrix
 
+
